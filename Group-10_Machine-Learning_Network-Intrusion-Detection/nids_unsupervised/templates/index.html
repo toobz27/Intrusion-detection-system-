@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Network Intrusion Detector</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; padding: 30px 20px; }
+    .container { max-width: 640px; margin: 0 auto; }
+    h1 { font-size: 22px; color: #1a1a2e; margin-bottom: 4px; }
+    .subtitle { color: #666; font-size: 13px; margin-bottom: 24px; }
+    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 16px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .card h2 { font-size: 15px; margin-bottom: 16px; color: #333; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    label { font-size: 12px; color: #555; display: block; margin-bottom: 4px; }
+    input { width: 100%; padding: 8px 10px; border: 1px solid #ddd;
+            border-radius: 6px; font-size: 13px; }
+    input:focus { outline: none; border-color: #4361ee; }
+    .btn-row { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+    .btn-primary { background: #4361ee; color: white; border: none; padding: 10px 24px;
+                   border-radius: 6px; font-size: 14px; cursor: pointer; flex: 1; }
+    .btn-primary:hover { background: #3451d1; }
+    .btn-sample { background: #f8f9fa; color: #333; border: 1px solid #ddd;
+                  padding: 8px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+    .btn-sample:hover { background: #e9ecef; }
+    #result { display: none; }
+    .verdict { padding: 16px; border-radius: 8px; margin-bottom: 16px; }
+    .verdict.attack { background: #fff5f5; border: 1px solid #fc8181; }
+    .verdict.normal { background: #f0fff4; border: 1px solid #68d391; }
+    .verdict-title { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+    .verdict.attack .verdict-title { color: #c53030; }
+    .verdict.normal .verdict-title { color: #276749; }
+    .verdict-sub { font-size: 13px; color: #666; }
+    .model-row { display: flex; justify-content: space-between; align-items: center;
+                 padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+    .model-row:last-child { border-bottom: none; }
+    .model-name { color: #555; }
+    .tag { padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+    .tag-attack { background: #fff5f5; color: #c53030; border: 1px solid #fc8181; }
+    .tag-normal { background: #f0fff4; color: #276749; border: 1px solid #68d391; }
+    .tag-info   { background: #ebf8ff; color: #2b6cb0; border: 1px solid #90cdf4; }
+    .spinner { text-align: center; color: #888; padding: 20px; display: none; }
+    .error-box { background: #fff5f5; color: #c53030; padding: 12px; border-radius: 6px;
+                 font-size: 13px; border: 1px solid #fc8181; margin-bottom: 16px; display: none; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <h1>🛡️ Network Intrusion Detector</h1>
+  <p class="subtitle">CIC-IDS2017 — Unsupervised Detection (Isolation Forest + K-Means)</p>
+
+  <div class="card">
+    <h2>Enter Connection Features</h2>
+    <div class="grid">
+      <div>
+        <label>Flow Duration (μs)</label>
+        <input type="number" id="f1" value="0">
+      </div>
+      <div>
+        <label>Total Fwd Packets</label>
+        <input type="number" id="f2" value="2">
+      </div>
+      <div>
+        <label>Total Bwd Packets</label>
+        <input type="number" id="f3" value="0">
+      </div>
+      <div>
+        <label>Total Length Fwd Packets</label>
+        <input type="number" id="f4" value="491">
+      </div>
+      <div>
+        <label>Flow Bytes/s</label>
+        <input type="number" id="f5" value="0" step="0.01">
+      </div>
+      <div>
+        <label>Destination Port</label>
+        <input type="number" id="f6" value="80">
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-sample" onclick="load('normal')">Normal sample</button>
+      <button class="btn-sample" onclick="load('dos')">DoS sample</button>
+      <button class="btn-sample" onclick="load('scan')">PortScan sample</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn-primary" onclick="classify()">Classify Connection</button>
+    </div>
+  </div>
+
+  <div class="spinner" id="spinner">Analysing...</div>
+  <div class="error-box" id="error-box"></div>
+
+  <div id="result">
+    <div class="card">
+      <div id="verdict" class="verdict">
+        <div class="verdict-title" id="verdict-title"></div>
+        <div class="verdict-sub"  id="verdict-sub"></div>
+      </div>
+      <h2 style="margin-bottom:12px;">Model Results</h2>
+      <div class="model-row">
+        <span class="model-name">Isolation Forest <small style="color:#aaa">(anomaly detection)</small></span>
+        <span class="tag" id="tag-iso"></span>
+      </div>
+      <div class="model-row">
+        <span class="model-name">K-Means <small style="color:#aaa">(clustering)</small></span>
+        <span class="tag tag-info" id="tag-km"></span>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script>
+  const samples = {
+    normal: [109, 1, 1, 6,   55.0, 443],
+    dos:    [0,   1, 0, 491, 0,    80 ],
+    scan:   [1e6, 1, 0, 28,  0.03, 22 ]
+  };
+
+  function load(type) {
+    const s = samples[type];
+    ['f1','f2','f3','f4','f5','f6'].forEach((id, i) => {
+      document.getElementById(id).value = s[i];
+    });
+  }
+
+  async function classify() {
+    document.getElementById('result').style.display    = 'none';
+    document.getElementById('error-box').style.display = 'none';
+    document.getElementById('spinner').style.display   = 'block';
+
+    const ids = ['f1','f2','f3','f4','f5','f6'];
+    const keys = ['Flow Duration','Total Fwd Packets','Total Backward Packets',
+                  'Total Length of Fwd Packets','Flow Bytes/s','Destination Port'];
+    const features = {};
+    ids.forEach((id, i) => {
+      features[keys[i]] = parseFloat(document.getElementById(id).value) || 0;
+    });
+
+    try {
+      const res  = await fetch('/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ features })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      const isAttack = data.overall === 'ATTACK';
+
+      const vBox = document.getElementById('verdict');
+      vBox.className = 'verdict ' + (isAttack ? 'attack' : 'normal');
+      document.getElementById('verdict-title').textContent =
+        isAttack ? '🚨 Attack Detected' : '✅ Normal Traffic';
+      document.getElementById('verdict-sub').textContent =
+        isAttack ? 'Anomalous pattern detected by unsupervised models.'
+                 : 'No anomalies detected in this connection.';
+
+      const isoTag = document.getElementById('tag-iso');
+      isoTag.textContent = data.isolation_forest.label;
+      isoTag.className   = 'tag ' + (isAttack ? 'tag-attack' : 'tag-normal');
+
+      document.getElementById('tag-km').textContent = 'Cluster ' + data.kmeans.cluster;
+
+      document.getElementById('result').style.display = 'block';
+    } catch(e) {
+      document.getElementById('error-box').textContent  = 'Error: ' + e.message;
+      document.getElementById('error-box').style.display = 'block';
+    }
+    document.getElementById('spinner').style.display = 'none';
+  }
+</script>
+</body>
+</html>

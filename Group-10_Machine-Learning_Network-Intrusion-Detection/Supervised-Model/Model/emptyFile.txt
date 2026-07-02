@@ -1,0 +1,1 @@
+This file is created so that the Model folder is pushed even when there is no .pkl file present inside the Model folder

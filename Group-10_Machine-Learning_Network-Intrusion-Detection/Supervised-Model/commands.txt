@@ -1,0 +1,19 @@
+Install Python 3.12
+
+Create virtual environment:
+py -3.12 -m venv venv
+
+Activate virtual environment:
+venv\Scripts\Activate.ps1
+
+Upgrade Pip:
+python -m pip install --upgrade pip
+
+Install Pandas Safely:
+pip install pandas --only-binary=:all:
+
+Install dependencies:
+pip install -r requirements.txt
+
+Launch app on localhost:
+python -m uvicorn main:app --reload
